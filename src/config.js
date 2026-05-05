@@ -31,5 +31,20 @@ export const CONFIG = {
     polygonWssUrls: (process.env.POLYGON_WSS_URLS || "").split(",").map((s) => s.trim()).filter(Boolean),
     polygonWssUrl: process.env.POLYGON_WSS_URL || "",
     btcUsdAggregator: process.env.CHAINLINK_BTC_USD_AGGREGATOR || "0xc907E116054Ad103354f2D350FD2514433D57F6f"
+  },
+
+  paper: {
+    enabled: (process.env.PAPER_ENABLED || "false").toLowerCase() === "true",
+    startingBalance: Number(process.env.PAPER_STARTING_BALANCE || "1000"),
+    betPct: Number(process.env.PAPER_BET_PCT || "5"),
+    minEntryPrice: Number(process.env.PAPER_MIN_ENTRY_PRICE || "0.50"),
+    maxEntryPrice: Number(process.env.PAPER_MAX_ENTRY_PRICE || "0.65"),
+    takeProfitPct: Number(process.env.PAPER_TAKE_PROFIT_PCT || "20"),
+    stopLossPct: Number(process.env.PAPER_STOP_LOSS_PCT || "25"),
+    edgeExitThreshold: process.env.PAPER_EDGE_EXIT_THRESHOLD === undefined
+      ? -0.02
+      : Number(process.env.PAPER_EDGE_EXIT_THRESHOLD),
+    flipMinProb: Number(process.env.PAPER_FLIP_MIN_PROB || "0.75"),
+    flipMinEdge: Number(process.env.PAPER_FLIP_MIN_EDGE || "0.20")
   }
 };

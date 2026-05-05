@@ -25,6 +25,8 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { applyGlobalProxyFromEnv } from "./net/proxy.js";
+import { createPaperTrader } from "./paper/trader.js";
+import { renderPaperSection } from "./paper/display.js";
 
 function countVwapCrosses(closes, vwapSeries, lookback) {
   if (closes.length < lookback || vwapSeries.length < lookback) return null;
@@ -400,9 +402,35 @@ async function main() {
   const polymarketLiveStream = startPolymarketChainlinkPriceStream({});
   const chainlinkStream = startChainlinkPriceStream({});
 
+  const paperTrader = CONFIG.paper.enabled
+    ? createPaperTrader({
+        startingBalance: CONFIG.paper.startingBalance,
+        betPct: CONFIG.paper.betPct,
+        minEntryPrice: CONFIG.paper.minEntryPrice,
+        maxEntryPrice: CONFIG.paper.maxEntryPrice,
+        takeProfitPct: CONFIG.paper.takeProfitPct,
+        stopLossPct: CONFIG.paper.stopLossPct,
+        edgeExitThreshold: CONFIG.paper.edgeExitThreshold,
+        flipMinProb: CONFIG.paper.flipMinProb,
+        flipMinEdge: CONFIG.paper.flipMinEdge
+      })
+    : null;
+
   let prevSpotPrice = null;
   let prevCurrentPrice = null;
   let priceToBeatState = { slug: null, value: null, setAtMs: null };
+
+  const SIGNALS_CSV = "./logs/signals.csv";
+  const SIGNALS_ROTATE_MS = 3 * 60 * 60 * 1000;
+  let signalsCreatedAtMs = fs.existsSync(SIGNALS_CSV) ? fs.statSync(SIGNALS_CSV).mtimeMs : Date.now();
+
+  function rotateSignalsCsvIfNeeded() {
+    if (Date.now() - signalsCreatedAtMs < SIGNALS_ROTATE_MS) return;
+    if (!fs.existsSync(SIGNALS_CSV)) return;
+    const stamp = new Date(signalsCreatedAtMs).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    fs.renameSync(SIGNALS_CSV, `./logs/signals_${stamp}.csv`);
+    signalsCreatedAtMs = Date.now();
+  }
 
   const header = [
     "timestamp",
@@ -416,7 +444,8 @@ async function main() {
     "mkt_down",
     "edge_up",
     "edge_down",
-    "recommendation"
+    "recommendation",
+    "no_trade_reason"
   ];
 
   while (true) {
@@ -512,7 +541,7 @@ async function main() {
       const marketDown = poly.ok ? poly.prices.down : null;
       const edge = computeEdge({ modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, marketYes: marketUp, marketNo: marketDown });
 
-      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown });
+      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, macd });
 
       const vwapSlopeLabel = vwapSlope === null ? "-" : vwapSlope > 0 ? "UP" : vwapSlope < 0 ? "DOWN" : "FLAT";
 
@@ -595,6 +624,33 @@ async function main() {
       }
 
       const priceToBeat = priceToBeatState.slug === marketSlug ? priceToBeatState.value : null;
+
+      if (paperTrader) {
+        paperTrader.onSignal({
+          signal: rec.action,
+          side: rec.side,
+          marketSlug,
+          priceToBeat,
+          upPrice: marketUp,
+          downPrice: marketDown,
+          currentPrice,
+          indicators: {
+            rsi: rsiNow,
+            rsiSlope,
+            macd: macdLabel,
+            heiken: `${consec.color ?? "-"} x${consec.count}`,
+            vwapDistPct: vwapDist,
+            modelUp: timeAware.adjustedUp,
+            modelDown: timeAware.adjustedDown,
+            edgeUp: edge.edgeUp,
+            edgeDown: edge.edgeDown,
+            phase: rec.phase,
+            strength: rec.strength ?? null,
+            timeLeftMin
+          }
+        });
+      }
+
       const currentPriceBaseLine = colorPriceLine({
         label: "CURRENT PRICE",
         price: currentPrice,
@@ -698,7 +754,8 @@ async function main() {
         kv("ET | Session:", `${ANSI.white}${fmtEtTime(new Date())}${ANSI.reset} | ${ANSI.white}${getBtcSession(new Date())}${ANSI.reset}`),
         "",
         sepLine(),
-        centerText(`${ANSI.dim}${ANSI.gray}created by @krajekis${ANSI.reset}`, screenWidth())
+        centerText(`${ANSI.dim}${ANSI.gray}created by @krajekis${ANSI.reset}`, screenWidth()),
+        ...(paperTrader ? renderPaperSection(paperTrader.getState(), { ANSI, kv, sepLine }) : [])
       ].filter((x) => x !== null);
 
       renderScreen(lines.join("\n") + "\n");
@@ -706,7 +763,8 @@ async function main() {
       prevSpotPrice = spotPrice ?? prevSpotPrice;
       prevCurrentPrice = currentPrice ?? prevCurrentPrice;
 
-      appendCsvRow("./logs/signals.csv", header, [
+      rotateSignalsCsvIfNeeded();
+      appendCsvRow(SIGNALS_CSV, header, [
         new Date().toISOString(),
         timing.elapsedMinutes.toFixed(3),
         timeLeftMin.toFixed(3),
@@ -718,7 +776,8 @@ async function main() {
         marketDown,
         edge.edgeUp,
         edge.edgeDown,
-        rec.action === "ENTER" ? `${rec.side}:${rec.phase}:${rec.strength}` : "NO_TRADE"
+        rec.action === "ENTER" ? `${rec.side}:${rec.phase}:${rec.strength}` : "NO_TRADE",
+        rec.action === "NO_TRADE" ? (rec.reason ?? "") : ""
       ]);
     } catch (err) {
       console.log("────────────────────────────");

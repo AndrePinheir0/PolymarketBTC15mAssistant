@@ -20,15 +20,22 @@ export function computeEdge({ modelUp, modelDown, marketYes, marketNo }) {
   };
 }
 
-export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, modelDown = null }) {
+export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, modelDown = null, macd = null }) {
   const phase = remainingMinutes > 10 ? "EARLY" : remainingMinutes > 5 ? "MID" : "LATE";
 
-  const threshold = phase === "EARLY" ? 0.05 : phase === "MID" ? 0.1 : 0.2;
-
-  const minProb = phase === "EARLY" ? 0.55 : phase === "MID" ? 0.6 : 0.65;
+  // Raised thresholds: filter out marginal trades
+  const threshold = phase === "EARLY" ? 0.15 : phase === "MID" ? 0.2 : 0.3;
+  const minProb = phase === "EARLY" ? 0.65 : phase === "MID" ? 0.7 : 0.75;
 
   if (edgeUp === null || edgeDown === null) {
     return { action: "NO_TRADE", side: null, phase, reason: "missing_market_data" };
+  }
+
+  // Skip when MACD histogram is expanding — momentum already priced in
+  const macdExpanding = macd !== null && macd.hist !== null && macd.histDelta !== null
+    && ((macd.hist > 0 && macd.histDelta > 0) || (macd.hist < 0 && macd.histDelta < 0));
+  if (macdExpanding) {
+    return { action: "NO_TRADE", side: null, phase, reason: "macd_expanding" };
   }
 
   const bestSide = edgeUp > edgeDown ? "UP" : "DOWN";
@@ -43,6 +50,6 @@ export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, mod
     return { action: "NO_TRADE", side: null, phase, reason: `prob_below_${minProb}` };
   }
 
-  const strength = bestEdge >= 0.2 ? "STRONG" : bestEdge >= 0.1 ? "GOOD" : "OPTIONAL";
+  const strength = bestEdge >= 0.3 ? "STRONG" : bestEdge >= 0.2 ? "GOOD" : "OPTIONAL";
   return { action: "ENTER", side: bestSide, phase, strength, edge: bestEdge };
 }
