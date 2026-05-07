@@ -5,6 +5,8 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { CONFIG } from "./config.js";
 
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const sessions = new Set();
@@ -95,6 +97,34 @@ export function startDashboardServer() {
         return;
       }
       serveFile(res, path.join(__dirname, "index.html"), "text/html");
+      return;
+    }
+
+    if (method === "GET" && pathname === "/logs/paper_trades.csv") {
+      if (!isAuthenticated(req)) {
+        res.writeHead(302, { "Location": "/login" });
+        res.end();
+        return;
+      }
+      serveFile(res, path.join(PROJECT_ROOT, "logs", "paper_trades.csv"), "text/csv");
+      return;
+    }
+
+    if (method === "GET" && pathname === "/api/state") {
+      if (!isAuthenticated(req)) {
+        res.writeHead(401);
+        res.end("Unauthorized");
+        return;
+      }
+      fs.readFile(path.join(PROJECT_ROOT, "logs", "paper_state.json"), "utf8", (err, data) => {
+        if (err) {
+          res.writeHead(404);
+          res.end("{}");
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(data);
+      });
       return;
     }
 
