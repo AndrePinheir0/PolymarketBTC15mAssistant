@@ -40,11 +40,28 @@ export const CONFIG = {
     minEntryPrice: Number(process.env.PAPER_MIN_ENTRY_PRICE || "0.50"),
     maxEntryPrice: Number(process.env.PAPER_MAX_ENTRY_PRICE || "0.65"),
     takeProfitPct: Number(process.env.PAPER_TAKE_PROFIT_PCT || "20"),
+    tpEarlyMinutes: Number(process.env.PAPER_TP_EARLY_MINUTES || "10"),
+    tpLateMinutes: Number(process.env.PAPER_TP_LATE_MINUTES || "5"),
+    tpEarlyMultiplier: Number(process.env.PAPER_TP_EARLY_MULTIPLIER || "2.0"),
+    tpLateMultiplier: Number(process.env.PAPER_TP_LATE_MULTIPLIER || "0.6"),
+    tpEdgeStrongThreshold: Number(process.env.PAPER_TP_EDGE_STRONG_THRESHOLD || "0.30"),
+    tpEdgeStrongBonus: Number(process.env.PAPER_TP_EDGE_STRONG_BONUS || "0.30"),
     stopLossPct: Number(process.env.PAPER_STOP_LOSS_PCT || "25"),
+    stopLossEarlyMinutes: Number(process.env.PAPER_STOP_LOSS_EARLY_MINUTES || "10"),
     edgeExitThreshold: process.env.PAPER_EDGE_EXIT_THRESHOLD === undefined
       ? -0.02
       : Number(process.env.PAPER_EDGE_EXIT_THRESHOLD),
+    edgeExitEarlyThreshold: process.env.PAPER_EDGE_EXIT_EARLY_THRESHOLD === undefined
+      ? -0.20
+      : Number(process.env.PAPER_EDGE_EXIT_EARLY_THRESHOLD),
+    earlyMinutes: Number(process.env.PAPER_EARLY_MINUTES || "10"),
     flipMinProb: Number(process.env.PAPER_FLIP_MIN_PROB || "0.75"),
     flipMinEdge: Number(process.env.PAPER_FLIP_MIN_EDGE || "0.20")
+  },
+
+  dashboard: {
+    user: process.env.DASHBOARD_USER || "admin",
+    password: process.env.DASHBOARD_PASSWORD || "",
+    port: Number(process.env.DASHBOARD_PORT || "3000")
   }
 };
