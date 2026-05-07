@@ -27,6 +27,7 @@ import readline from "node:readline";
 import { applyGlobalProxyFromEnv } from "./net/proxy.js";
 import { createPaperTrader } from "./paper/trader.js";
 import { renderPaperSection } from "./paper/display.js";
+import { startDashboardServer } from "./server.js";
 
 function countVwapCrosses(closes, vwapSeries, lookback) {
   if (closes.length < lookback || vwapSeries.length < lookback) return null;
@@ -398,6 +399,8 @@ async function fetchPolymarketSnapshot() {
 }
 
 async function main() {
+  startDashboardServer();
+
   const binanceStream = startBinanceTradeStream({ symbol: CONFIG.symbol });
   const polymarketLiveStream = startPolymarketChainlinkPriceStream({});
   const chainlinkStream = startChainlinkPriceStream({});
@@ -409,8 +412,17 @@ async function main() {
         minEntryPrice: CONFIG.paper.minEntryPrice,
         maxEntryPrice: CONFIG.paper.maxEntryPrice,
         takeProfitPct: CONFIG.paper.takeProfitPct,
+        tpEarlyMinutes: CONFIG.paper.tpEarlyMinutes,
+        tpLateMinutes: CONFIG.paper.tpLateMinutes,
+        tpEarlyMultiplier: CONFIG.paper.tpEarlyMultiplier,
+        tpLateMultiplier: CONFIG.paper.tpLateMultiplier,
+        tpEdgeStrongThreshold: CONFIG.paper.tpEdgeStrongThreshold,
+        tpEdgeStrongBonus: CONFIG.paper.tpEdgeStrongBonus,
         stopLossPct: CONFIG.paper.stopLossPct,
+        stopLossEarlyMinutes: CONFIG.paper.stopLossEarlyMinutes,
         edgeExitThreshold: CONFIG.paper.edgeExitThreshold,
+        edgeExitEarlyThreshold: CONFIG.paper.edgeExitEarlyThreshold,
+        earlyMinutes: CONFIG.paper.earlyMinutes,
         flipMinProb: CONFIG.paper.flipMinProb,
         flipMinEdge: CONFIG.paper.flipMinEdge
       })
@@ -752,10 +764,10 @@ async function main() {
         sepLine(),
         "",
         kv("ET | Session:", `${ANSI.white}${fmtEtTime(new Date())}${ANSI.reset} | ${ANSI.white}${getBtcSession(new Date())}${ANSI.reset}`),
+        ...(paperTrader ? renderPaperSection(paperTrader.getState(), { ANSI, kv, sepLine }) : []),
         "",
         sepLine(),
-        centerText(`${ANSI.dim}${ANSI.gray}created by @krajekis${ANSI.reset}`, screenWidth()),
-        ...(paperTrader ? renderPaperSection(paperTrader.getState(), { ANSI, kv, sepLine }) : [])
+        centerText(`${ANSI.dim}${ANSI.gray}created by @krajekis${ANSI.reset}`, screenWidth())
       ].filter((x) => x !== null);
 
       renderScreen(lines.join("\n") + "\n");
