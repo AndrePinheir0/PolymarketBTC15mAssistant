@@ -792,22 +792,38 @@ function tradeRows(rows) {
   `).join('');
 }
 
-function renderOpenTrade(trade) {
+function renderOpenTrade(trade, btcSpot, consecutiveLosses) {
   const el = document.getElementById('open-trade-card');
+  const losses = consecutiveLosses ?? 0;
+  const breaker = losses >= 3
+    ? `<div style="margin-top:10px;font-size:11px;color:var(--yellow)">⚠ Circuit breaker — ${losses} losses consecutivos</div>`
+    : losses > 0
+      ? `<div style="margin-top:10px;font-size:11px;color:var(--yellow)">${losses}/3 losses consecutivos</div>`
+      : '';
   if (!trade) {
-    el.innerHTML = '<span class="section-title">Open Trade</span><div class="trade-card-empty">No open trade</div>';
+    el.innerHTML = `<span class="section-title">Open Trade</span><div class="trade-card-empty">No open trade</div>${breaker}`;
     return;
   }
   const side = trade.side;
   const sideHtml = `<span class="side-${side}">${side}</span>`;
+  const ptb = parseFloat(trade.priceToBeat);
+  const btcNow = btcSpot != null ? parseFloat(btcSpot) : NaN;
+  let btcNowHtml = btcSpot != null ? '$' + fmtNum(btcNow, 0) : '<span style="color:var(--muted)">—</span>';
+  if (!isNaN(btcNow) && !isNaN(ptb) && ptb > 0) {
+    const delta = btcNow - ptb;
+    const winning = (trade.side === 'UP' && delta > 0) || (trade.side === 'DOWN' && delta < 0);
+    const arrow = delta > 0 ? '↑' : '↓';
+    const color = winning ? 'var(--green)' : 'var(--red)';
+    btcNowHtml += ` <span style="color:${color};font-size:11px">${arrow}$${Math.abs(delta).toFixed(0)}</span>`;
+  }
   el.innerHTML = '<span class="section-title"><span class="open-dot"></span>Open Trade</span>' + tradeRows([
     ['Side',       sideHtml],
     ['Entry',      fmtNum(trade.entryPrice, 3)],
     ['Bet',        '$' + fmtNum(trade.betAmount, 2)],
-    ['Shares',     fmtNum(trade.shares, 2)],
-    ['Ref BTC',    '$' + fmtNum(trade.priceToBeat, 0)],
+    ['Ref BTC',    '$' + fmtNum(ptb, 0)],
+    ['BTC Now',    btcNowHtml],
     ['Opened',     fmtDate(trade.openedAt)],
-  ]);
+  ]) + breaker;
 }
 
 function renderLastTrade(trade) {
@@ -835,7 +851,7 @@ async function loadState() {
     const res = await fetch('/api/state');
     if (!res.ok) return;
     const state = await res.json();
-    renderOpenTrade(state.openTrade || null);
+    renderOpenTrade(state.openTrade || null, state.btcSpotPrice ?? null, state.consecutiveLosses ?? 0);
     renderLastTrade(state.lastTrade || null);
   } catch (_) {}
 }
@@ -843,6 +859,7 @@ async function loadState() {
 document.getElementById('reload-btn').addEventListener('click', e => { e.preventDefault(); load(); loadState(); });
 load();
 loadState();
+setInterval(loadState, 30000);
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

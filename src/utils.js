@@ -64,3 +64,31 @@ export function appendCsvRow(filePath, header, row) {
 
   fs.appendFileSync(filePath, `${line}\n`, "utf8");
 }
+
+// Patch the last occurrence of a row matching `matchField=matchValue` in a CSV,
+// setting `patchField` to `patchValue`. Reads the whole file, rewrites in-place.
+export function patchCsvRow(filePath, matchField, matchValue, patchField, patchValue) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  const lines = content.split("\n");
+  if (lines.length < 2) return;
+
+  const headers = lines[0].split(",");
+  const matchIdx = headers.indexOf(matchField);
+  const patchIdx = headers.indexOf(patchField);
+  if (matchIdx === -1 || patchIdx === -1) return;
+
+  // Find last matching row (search from end)
+  let found = -1;
+  for (let i = lines.length - 1; i >= 1; i--) {
+    if (!lines[i].trim()) continue;
+    const cols = lines[i].split(",");
+    if (cols[matchIdx] === String(matchValue)) { found = i; break; }
+  }
+  if (found === -1) return;
+
+  const cols = lines[found].split(",");
+  cols[patchIdx] = String(patchValue);
+  lines[found] = cols.join(",");
+  fs.writeFileSync(filePath, lines.join("\n"), "utf8");
+}

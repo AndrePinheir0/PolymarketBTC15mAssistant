@@ -42,17 +42,18 @@ export const CONFIG = {
     takeProfitPct: Number(process.env.PAPER_TAKE_PROFIT_PCT || "20"),
     tpEarlyMinutes: Number(process.env.PAPER_TP_EARLY_MINUTES || "10"),
     tpLateMinutes: Number(process.env.PAPER_TP_LATE_MINUTES || "5"),
-    tpEarlyMultiplier: Number(process.env.PAPER_TP_EARLY_MULTIPLIER || "2.0"),
+    tpEarlyMultiplier: Number(process.env.PAPER_TP_EARLY_MULTIPLIER || "1.5"),
     tpLateMultiplier: Number(process.env.PAPER_TP_LATE_MULTIPLIER || "0.6"),
     tpEdgeStrongThreshold: Number(process.env.PAPER_TP_EDGE_STRONG_THRESHOLD || "0.30"),
     tpEdgeStrongBonus: Number(process.env.PAPER_TP_EDGE_STRONG_BONUS || "0.30"),
     stopLossPct: Number(process.env.PAPER_STOP_LOSS_PCT || "25"),
     stopLossEarlyMinutes: Number(process.env.PAPER_STOP_LOSS_EARLY_MINUTES || "10"),
+    catastrophicLossPct: Number(process.env.PAPER_CATASTROPHIC_LOSS_PCT || "50"),
     edgeExitThreshold: process.env.PAPER_EDGE_EXIT_THRESHOLD === undefined
       ? -0.02
       : Number(process.env.PAPER_EDGE_EXIT_THRESHOLD),
     edgeExitEarlyThreshold: process.env.PAPER_EDGE_EXIT_EARLY_THRESHOLD === undefined
-      ? -0.20
+      ? -0.15
       : Number(process.env.PAPER_EDGE_EXIT_EARLY_THRESHOLD),
     earlyMinutes: Number(process.env.PAPER_EARLY_MINUTES || "10"),
     flipMinProb: Number(process.env.PAPER_FLIP_MIN_PROB || "0.75"),

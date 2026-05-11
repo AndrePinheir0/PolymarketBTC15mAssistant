@@ -10,6 +10,11 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const sessions = new Set();
+let currentBtcPrice = null;
+
+export function setSpotPrice(price) {
+  currentBtcPrice = price;
+}
 
 function parseCookies(cookieHeader) {
   const cookies = {};
@@ -122,8 +127,15 @@ export function startDashboardServer() {
           res.end("{}");
           return;
         }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(data);
+        try {
+          const state = JSON.parse(data);
+          state.btcSpotPrice = currentBtcPrice;
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(state));
+        } catch {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(data);
+        }
       });
       return;
     }

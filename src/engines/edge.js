@@ -20,22 +20,14 @@ export function computeEdge({ modelUp, modelDown, marketYes, marketNo }) {
   };
 }
 
-export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, modelDown = null, macd = null }) {
+export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, modelDown = null, heikenColor = null }) {
   const phase = remainingMinutes > 10 ? "EARLY" : remainingMinutes > 5 ? "MID" : "LATE";
 
-  // Raised thresholds: filter out marginal trades
   const threshold = phase === "EARLY" ? 0.15 : phase === "MID" ? 0.2 : 0.3;
   const minProb = phase === "EARLY" ? 0.65 : phase === "MID" ? 0.7 : 0.75;
 
   if (edgeUp === null || edgeDown === null) {
     return { action: "NO_TRADE", side: null, phase, reason: "missing_market_data" };
-  }
-
-  // Skip when MACD histogram is expanding — momentum already priced in
-  const macdExpanding = macd !== null && macd.hist !== null && macd.histDelta !== null
-    && ((macd.hist > 0 && macd.histDelta > 0) || (macd.hist < 0 && macd.histDelta < 0));
-  if (macdExpanding) {
-    return { action: "NO_TRADE", side: null, phase, reason: "macd_expanding" };
   }
 
   const bestSide = edgeUp > edgeDown ? "UP" : "DOWN";
@@ -48,6 +40,14 @@ export function decide({ remainingMinutes, edgeUp, edgeDown, modelUp = null, mod
 
   if (bestModel !== null && bestModel < minProb) {
     return { action: "NO_TRADE", side: null, phase, reason: `prob_below_${minProb}` };
+  }
+
+  // Heiken Ashi contra-tendência: não entrar DOWN com velas verdes nem UP com velas vermelhas
+  if (heikenColor === "green" && bestSide === "DOWN") {
+    return { action: "NO_TRADE", side: null, phase, reason: "heiken_contra_trend" };
+  }
+  if (heikenColor === "red" && bestSide === "UP") {
+    return { action: "NO_TRADE", side: null, phase, reason: "heiken_contra_trend" };
   }
 
   const strength = bestEdge >= 0.3 ? "STRONG" : bestEdge >= 0.2 ? "GOOD" : "OPTIONAL";

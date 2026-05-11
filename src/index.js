@@ -27,7 +27,8 @@ import readline from "node:readline";
 import { applyGlobalProxyFromEnv } from "./net/proxy.js";
 import { createPaperTrader } from "./paper/trader.js";
 import { renderPaperSection } from "./paper/display.js";
-import { startDashboardServer } from "./server.js";
+import { startDashboardServer, setSpotPrice } from "./server.js";
+import { computeBollingerBands, computeAtr, computeObImbalance } from "./indicators/bollingerBands.js";
 
 function countVwapCrosses(closes, vwapSeries, lookback) {
   if (closes.length < lookback || vwapSeries.length < lookback) return null;
@@ -420,6 +421,7 @@ async function main() {
         tpEdgeStrongBonus: CONFIG.paper.tpEdgeStrongBonus,
         stopLossPct: CONFIG.paper.stopLossPct,
         stopLossEarlyMinutes: CONFIG.paper.stopLossEarlyMinutes,
+        catastrophicLossPct: CONFIG.paper.catastrophicLossPct,
         edgeExitThreshold: CONFIG.paper.edgeExitThreshold,
         edgeExitEarlyThreshold: CONFIG.paper.edgeExitEarlyThreshold,
         earlyMinutes: CONFIG.paper.earlyMinutes,
@@ -457,7 +459,15 @@ async function main() {
     "edge_up",
     "edge_down",
     "recommendation",
-    "no_trade_reason"
+    "no_trade_reason",
+    "bb_pctB",
+    "bb_bandwidth",
+    "bb_squeeze",
+    "atr_pct",
+    "ob_imbalance_up",
+    "ob_imbalance_down",
+    "score_up",
+    "score_down"
   ];
 
   while (true) {
@@ -526,6 +536,15 @@ async function main() {
         ? closes[closes.length - 1] < vwapNow && closes[closes.length - 2] > vwapSeries[vwapSeries.length - 2]
         : false;
 
+      const bb = computeBollingerBands(closes, 20, 2);
+      const atr = computeAtr(candles, 14);
+      const atrPct = atr !== null && lastPrice > 0 ? atr / lastPrice : null;
+
+      const obUp = poly.ok ? poly.orderbook.up : null;
+      const obDown = poly.ok ? poly.orderbook.down : null;
+      const obImbalanceUp = obUp ? computeObImbalance(obUp.bidLiquidity, obUp.askLiquidity) : null;
+      const obImbalanceDown = obDown ? computeObImbalance(obDown.bidLiquidity, obDown.askLiquidity) : null;
+
       const regimeInfo = detectRegime({
         price: lastPrice,
         vwap: vwapNow,
@@ -541,10 +560,13 @@ async function main() {
         vwapSlope,
         rsi: rsiNow,
         rsiSlope,
-        macd,
         heikenColor: consec.color,
         heikenCount: consec.count,
-        failedVwapReclaim
+        failedVwapReclaim,
+        bb,
+        atrPct,
+        obImbalanceUp,
+        obImbalanceDown
       });
 
       const timeAware = applyTimeAwareness(scored.rawUp, timeLeftMin, CONFIG.candleWindowMinutes);
@@ -553,7 +575,7 @@ async function main() {
       const marketDown = poly.ok ? poly.prices.down : null;
       const edge = computeEdge({ modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, marketYes: marketUp, marketNo: marketDown });
 
-      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, macd });
+      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, heikenColor: consec.color });
 
       const vwapSlopeLabel = vwapSlope === null ? "-" : vwapSlope > 0 ? "UP" : vwapSlope < 0 ? "DOWN" : "FLAT";
 
@@ -748,6 +770,18 @@ async function main() {
         kv("MACD:", macdLine.split(": ")[1] ?? macdLine),
         kv("Delta 1/3:", deltaLine.split(": ")[1] ?? deltaLine),
         kv("VWAP:", vwapLine.split(": ")[1] ?? vwapLine),
+        bb !== null ? kv("BB %B:", (() => {
+          const pctB = bb.pctB !== null ? bb.pctB.toFixed(2) : "-";
+          const bw = bb.bandwidth !== null ? (bb.bandwidth * 100).toFixed(2) + "%" : "-";
+          const color = bb.pctB > 0.8 ? ANSI.green : bb.pctB < 0.2 ? ANSI.red : ANSI.reset;
+          const squeeze = bb.bandwidth !== null && bb.bandwidth < 0.005 ? ` ${ANSI.yellow}[SQUEEZE]${ANSI.reset}` : "";
+          return `${color}${pctB}${ANSI.reset} | bw: ${bw}${squeeze}`;
+        })()) : null,
+        (() => {
+          if (obImbalanceUp === null && obImbalanceDown === null) return null;
+          const fmt = v => v === null ? "-" : (v >= 0 ? ANSI.green : ANSI.red) + (v >= 0 ? "+" : "") + (v * 100).toFixed(0) + "%" + ANSI.reset;
+          return kv("OB Imbalance:", `UP ${fmt(obImbalanceUp)} | DN ${fmt(obImbalanceDown)}`);
+        })(),
         "",
         sepLine(),
         "",
@@ -773,6 +807,7 @@ async function main() {
       renderScreen(lines.join("\n") + "\n");
 
       prevSpotPrice = spotPrice ?? prevSpotPrice;
+      setSpotPrice(spotPrice);
       prevCurrentPrice = currentPrice ?? prevCurrentPrice;
 
       rotateSignalsCsvIfNeeded();
@@ -789,7 +824,15 @@ async function main() {
         edge.edgeUp,
         edge.edgeDown,
         rec.action === "ENTER" ? `${rec.side}:${rec.phase}:${rec.strength}` : "NO_TRADE",
-        rec.action === "NO_TRADE" ? (rec.reason ?? "") : ""
+        rec.action === "NO_TRADE" ? (rec.reason ?? "") : "",
+        bb?.pctB?.toFixed(3) ?? "",
+        bb?.bandwidth !== null && bb?.bandwidth !== undefined ? (bb.bandwidth * 100).toFixed(3) : "",
+        bb?.bandwidth !== null && bb?.bandwidth !== undefined && bb.bandwidth < 0.005 ? "1" : "0",
+        atrPct !== null ? (atrPct * 100).toFixed(4) : "",
+        obImbalanceUp !== null ? obImbalanceUp.toFixed(3) : "",
+        obImbalanceDown !== null ? obImbalanceDown.toFixed(3) : "",
+        scored.upScore,
+        scored.downScore
       ]);
     } catch (err) {
       console.log("────────────────────────────");
